@@ -28,49 +28,35 @@ print(combined_df['Stage'].unique())
 
 combined_df = combined_df.drop(columns=['Stage','Round','Group','Date', 'Comments', '∑FT','ET','P'])
 
-combined_df['Team 1'] = combined_df['Team 1'].str.extract(r'^([^>]+)')
-
+combined_df['Team 1'] = combined_df['Team 1'].str.extract(r'^([^›]+)')
+combined_df['Team 2'] = combined_df['Team 2'].str.extract(r'^([^›]+)')
+combined_df['Team 1'] = combined_df['Team 1'].str.lower().str.strip()
+combined_df['Team 2'] = combined_df['Team 2'].str.lower().str.strip()
 print(combined_df)
+unique_teams = combined_df['Team 1'].unique()
+print(unique_teams)
 
 
 # adding stadiums
 
-import chardet
-with open(r'C:\Users\99gio\OneDrive\Desktop\prove python\Stadiums Data\FootballStadiums.csv', 'rb') as f:
-    result = chardet.detect(f.read())
-
-stadiums_df = pd.read_csv(r'C:\Users\99gio\OneDrive\Desktop\prove python\Stadiums Data\FootballStadiums.csv', encoding=result['encoding'])
-print(stadiums_df.columns)
-
-stadiums_df = stadiums_df[stadiums_df['Confederation'] == 'UEFA']
-stadiums_df = stadiums_df[['Stadium', 'City', 'HomeTeams', 'Capacity', 'Country']]
-stadiums_df.columns = ['Stadium', 'City', 'Team 1', 'Capacity', 'Country']
+file_path = r'C:\Users\99gio\OneDrive\Desktop\prove python\stadium_data.xlsx'
+Stadiums_df = pd.read_excel(file_path, engine='openpyxl')
+Stadiums_df['Team'] = Stadiums_df['Team'].str.strip().str.lower()
+print(Stadiums_df.head())
 
 
-#combining matches and stadiums
+# checking if every team has a match in the Stadiums_Df
 
-from fuzzywuzzy import fuzz
-from fuzzywuzzy import process
+unique_teams_combined_df = set(combined_df['Team 1'].unique())
+unique_teams_stadiums_df = set(Stadiums_df['Team'].unique())
 
-# Funzione per effettuare il merge fuzzy
-def fuzzy_merge(df1, df2, key1, key2, threshold=70):
-    s = df1[key1].apply(lambda x: process.extractOne(x, df2[key2], scorer=fuzz.partial_ratio, score_cutoff=threshold))
-    df1['Matches'] = s.apply(lambda x: x[0] if x else None)
-    
-    # Unire i due DataFrame basandosi sulla nuova colonna 'Matches'
-    merged = pd.merge(df1, df2, left_on='Matches', right_on=key2, how='left')
-    
-    # Rimuovere la colonna 'Matches' dal DataFrame risultante
-    merged.drop('Matches', axis=1, inplace=True)
-    
-    return merged
+non_matching_teams = unique_teams_combined_df - unique_teams_stadiums_df
+print("Non matching teams in combined_df:", non_matching_teams)
 
-# Esegui il fuzzy merge
-merged_df = fuzzy_merge(combined_df, stadiums_df, 'Team 1', 'Team 1', threshold=60)
+non_matching_teams_stadiums = unique_teams_stadiums_df - unique_teams_combined_df
+print("Non matching teams in Stadiums_df:", non_matching_teams_stadiums)
 
-# Visualizza il DataFrame risultante
-print(merged_df.head())
+Teams_nd_Stadiums_df = pd.merge(combined_df, Stadiums_df[['Team', 'Stadium', 'City', 'Capacity']], left_on='Team 1', right_on='Team', how='left')
 
-
-
-
+# Stampa il risultato per verificare
+print(Teams_nd_Stadiums_df.head())
