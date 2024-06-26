@@ -4,7 +4,7 @@ import os
 
 # combine the different csv files into a DataFrame
 
-directory = r'C:\Users\99gio\OneDrive\Desktop\prove python\dati 2000-2022'
+directory = r'C:\Users\99gio\OneDrive\Desktop\prove python\dati 2000-2016'
 
 dataframes = []
 
@@ -58,5 +58,26 @@ print("Non matching teams in Stadiums_df:", non_matching_teams_stadiums)
 
 Teams_nd_Stadiums_df = pd.merge(combined_df, Stadiums_df[['Team', 'Stadium', 'City', 'Capacity']], left_on='Team 1', right_on='Team', how='left')
 
-# Stampa il risultato per verificare
 print(Teams_nd_Stadiums_df.head())
+
+# adding ranking to each team
+
+ranking_files = [
+    r'C:\Users\99gio\OneDrive\Desktop\prove python\RATINGS\rating 00_01 04_05.xlsx',
+    r'C:\Users\99gio\OneDrive\Desktop\prove python\RATINGS\rating 05_06 09_10.xlsx',
+    r'C:\Users\99gio\OneDrive\Desktop\prove python\RATINGS\rating 10_11 14_15.xlsx',
+    r'C:\Users\99gio\OneDrive\Desktop\prove python\RATINGS\rating 15_16.xlsx'
+]
+
+all_ranking = pd.DataFrame()
+
+for file in ranking_files:
+    df = pd.read_excel(file)
+    df['Team'] = df['Team'].str.lower().str.strip()
+    if all_ranking.empty:
+        all_ranking = df
+    else:
+        all_ranking = pd.merge(all_ranking, df, on='Team', how='outer')
+
+all_ranking.to_excel('unified_ranking_data.xlsx', index=False)
+print(all_ranking.head())
