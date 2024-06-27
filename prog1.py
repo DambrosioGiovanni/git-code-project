@@ -26,7 +26,7 @@ print(unique_stages)
 combined_df = combined_df[combined_df['Stage'] != 'Qualifying']
 print(combined_df['Stage'].unique())
 
-combined_df = combined_df.drop(columns=['Stage','Round','Group','Date', 'Comments', '∑FT','ET','P'])
+combined_df = combined_df.drop(columns=['Stage','Round','Group', 'Comments', '∑FT','ET','P'])
 
 combined_df['Team 1'] = combined_df['Team 1'].str.extract(r'^([^›]+)')
 combined_df['Team 2'] = combined_df['Team 2'].str.extract(r'^([^›]+)')
@@ -52,17 +52,17 @@ print("Non matching teams in combined_df:", non_matching_teams)
 non_matching_teams_stadiums = unique_teams_stadiums_df - unique_teams_combined_df
 print("Non matching teams in Stadiums_df:", non_matching_teams_stadiums)
 
-Teams_nd_Stadiums_df = pd.merge(combined_df, Stadiums_df[['Team', 'Stadium', 'City', 'Capacity']], left_on='Team 1', right_on='Team', how='left')
+Teams_nd_Stadiums_df = pd.merge(combined_df, Stadiums_df[['Team', 'Stadium', 'City', 'Capacity']], left_on='Team 1', right_on='Team', how='left').drop(columns=['Team'])
 print(Teams_nd_Stadiums_df.head())
 
 
 
 # adding ranking to each team
 ranking_files = [
+    r'C:\Users\99gio\OneDrive\Desktop\prove python\RATINGS\rating 99_00.xlsx',
     r'C:\Users\99gio\OneDrive\Desktop\prove python\RATINGS\rating 00_01 04_05.xlsx',
     r'C:\Users\99gio\OneDrive\Desktop\prove python\RATINGS\rating 05_06 09_10.xlsx',
-    r'C:\Users\99gio\OneDrive\Desktop\prove python\RATINGS\rating 10_11 14_15.xlsx',
-    r'C:\Users\99gio\OneDrive\Desktop\prove python\RATINGS\rating 15_16.xlsx'
+    r'C:\Users\99gio\OneDrive\Desktop\prove python\RATINGS\rating 10_11 14_15.xlsx'
 ]
 all_ranking = pd.DataFrame()
 
@@ -159,5 +159,84 @@ print("hope this is empty:", non_matching_teams)
 if non_matching_teams==set():
     print("Good job")
 
-all_ranking.to_excel('unified_ranking_data.xlsx', index=False)
-print(all_ranking.head())
+all_ranking_melted = all_ranking.melt(id_vars=['Team'], var_name='Season', value_name='Rank')
+all_ranking_melted.to_excel('unified_ranking_data2.xlsx', index=False)
+
+print(all_ranking_melted.head())
+
+# attempt to calculate distance between cities
+from geopy.geocoders import Nominatim
+from geopy.distance import geodesic
+
+geolocator = Nominatim(user_agent="unique_user_agent_for_your_application")
+
+def get_location(city):
+    location = geolocator.geocode(city, timeout=10)
+    if location:
+        return (location.latitude, location.longitude)
+    else:
+        return (None, None)
+
+def calculate_distance(city1, city2):
+    loc1 = get_location(city1)
+    loc2 = get_location(city2)
+    if None not in loc1 and None not in loc2:
+        return geodesic(loc1, loc2).km
+    else:
+        return "Location not found"
+
+city1 = Stadiums_df['City'].iloc[0]
+city2 = Stadiums_df['City'].iloc[1]
+distance = calculate_distance(city1, city2)
+print(f"The distance between {city1} and {city2} is {distance} km")
+
+# adding cities and ranking to the combined_df
+team_to_city = pd.Series(Stadiums_df['City'].values, index=Stadiums_df['Team']).to_dict()
+Teams_nd_Stadiums_df['City 2'] = Teams_nd_Stadiums_df['Team 2'].map(team_to_city)
+print(Teams_nd_Stadiums_df.head())
+
+Teams_nd_Stadiums_df['Cleaned Date'] = Teams_nd_Stadiums_df['Date'].str.extract(r'(\d{1,2} \w{3} \d{4})')[0]
+Teams_nd_Stadiums_df['Cleaned Date'] = Teams_nd_Stadiums_df['Cleaned Date'].str.replace(r'\s+', ' ', regex=True)
+Teams_nd_Stadiums_df['Date'] = pd.to_datetime(Teams_nd_Stadiums_df['Cleaned Date'], format='%d %b %Y', errors='coerce')
+
+
+def get_previous_season(date):
+    year = date.year
+    if date.month > 7:
+        return f"{year-1}-{year}"
+    else:
+        return f"{year-2}-{year-1}"
+
+Teams_nd_Stadiums_df['Previous Season'] = Teams_nd_Stadiums_df['Date'].apply(get_previous_season)
+
+print(Teams_nd_Stadiums_df[['Date', 'Previous Season']].head())
+
+
+Teams_nd_Stadiums_df = pd.merge(
+    Teams_nd_Stadiums_df,
+    all_ranking_melted[['Team', 'Season', 'Rank']],
+    left_on=['Team 1', 'Previous Season'],
+    right_on=['Team', 'Season'],
+    how='left',
+    suffixes=('', '_Team1')
+)
+
+Teams_nd_Stadiums_df.drop(columns=['Team', 'Season'], inplace=True)
+Teams_nd_Stadiums_df.rename(columns={'Rank': 'Ranking Team 1'}, inplace=True)
+
+Teams_nd_Stadiums_df = pd.merge(
+    Teams_nd_Stadiums_df,
+    all_ranking_melted[['Team', 'Season', 'Rank']],
+    left_on=['Team 2', 'Previous Season'],
+    right_on=['Team', 'Season'],
+    how='left',
+    suffixes=('', '_Team2')
+)
+
+Teams_nd_Stadiums_df.drop(columns=['Team', 'Season'], inplace=True)
+Teams_nd_Stadiums_df.rename(columns={'Rank': 'Ranking Team 2'}, inplace=True)
+
+print(Teams_nd_Stadiums_df.head())
+Teams_nd_Stadiums_df.to_excel('the_final_df_maybe.xlsx', index=False)
+print(Teams_nd_Stadiums_df.columns)
+
