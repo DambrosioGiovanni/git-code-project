@@ -164,31 +164,7 @@ all_ranking_melted.to_excel('unified_ranking_data2.xlsx', index=False)
 
 print(all_ranking_melted.head())
 
-# attempt to calculate distance between cities
-from geopy.geocoders import Nominatim
-from geopy.distance import geodesic
 
-geolocator = Nominatim(user_agent="unique_user_agent_for_your_application")
-
-def get_location(city):
-    location = geolocator.geocode(city, timeout=10)
-    if location:
-        return (location.latitude, location.longitude)
-    else:
-        return (None, None)
-
-def calculate_distance(city1, city2):
-    loc1 = get_location(city1)
-    loc2 = get_location(city2)
-    if None not in loc1 and None not in loc2:
-        return geodesic(loc1, loc2).km
-    else:
-        return "Location not found"
-
-city1 = Stadiums_df['City'].iloc[0]
-city2 = Stadiums_df['City'].iloc[1]
-distance = calculate_distance(city1, city2)
-print(f"The distance between {city1} and {city2} is {distance} km")
 
 # adding cities and ranking to the combined_df
 team_to_city = pd.Series(Stadiums_df['City'].values, index=Stadiums_df['Team']).to_dict()
@@ -240,3 +216,103 @@ print(Teams_nd_Stadiums_df.head())
 Teams_nd_Stadiums_df.to_excel('the_final_df_maybe.xlsx', index=False)
 print(Teams_nd_Stadiums_df.columns)
 
+
+# attempt to calculate distance between cities
+import pandas as pd
+from geopy.geocoders import Nominatim
+from geopy.distance import geodesic
+from tqdm import tqdm
+import os
+
+# Setup geolocator
+geolocator = Nominatim(user_agent="your_unique_user_agent")
+
+def get_location(city):
+    try:
+        return geolocator.geocode(city)
+    except Exception as e:
+        print(f"Error geocoding {city}: {str(e)}")
+        return None
+
+def calculate_distance(city1, city2):
+    loc1 = get_location(city1)
+    loc2 = get_location(city2)
+    if loc1 and loc2:
+        return geodesic((loc1.latitude, loc1.longitude), (loc2.latitude, loc2.longitude)).km
+    return None
+
+# Load existing distances from a backup file if it exists
+distance_df = pd.read_csv('distances_backup.csv') if os.path.exists('distances_backup.csv') else pd.DataFrame(columns=['City1', 'City2', 'Distance'])
+distance_dict = {tuple(row): dist for row, dist in distance_df.set_index(['City1', 'City2'])['Distance'].items()}
+
+# # Uncomment the following lines to re-enable distance calculations
+# for index, row in tqdm(Teams_nd_Stadiums_df.iterrows(), total=Teams_nd_Stadiums_df.shape[0]):
+#     city_pair = (row['City'], row['City 2'])
+#     if city_pair not in distance_dict:
+#         dist = calculate_distance(*city_pair)
+#         distance_dict[city_pair] = dist
+#         new_row = pd.DataFrame({'City1': [row['City']], 'City2': [row['City 2']], 'Distance': [dist]})
+#         distance_df = pd.concat([distance_df, new_row], ignore_index=True)
+#     distance_df.to_csv('distances_backup.csv', index=False)
+
+# Convert distance dictionary back to DataFrame for merging
+distance_df = pd.DataFrame(list(distance_dict.items()), columns=['City_Pair', 'Distance'])
+distance_df[['City1', 'City2']] = pd.DataFrame(distance_df['City_Pair'].tolist(), index=distance_df.index)
+
+missing_distances = distance_df['Distance'].isna().sum()
+if missing_distances == 0:
+    print(f"Number of empty values before in 'Distance': {missing_distances}. Good Job")
+else:
+    print(f"Number of empty values before in 'Distance': {missing_distances}. There are still missing values.")
+
+#I've checked the csv file and 22 cities have no distances calculated, so i manually add them
+
+new_distances = [
+    ('Istanbul', 'Prague', 1846),
+    ('Celtic', 'Barcelona', 2128),
+    ('Eindhoven', 'Trondheim', 1770),
+    ('Leverkusen', 'Kyiv', 1900),
+    ('Barcelona', 'Udine', 1350),
+    ('Athens', 'Udine', 1775),
+    ('Sofia', 'Bremen', 1900),
+    ('Hamburg', 'Porto', 2481),
+    ('Barcelona', 'Glasgow', 2128),
+    ('Lisbon', 'Kyiv', 4146),
+    ('London', 'Piraeus', 3147),
+    ('Celtic', 'Villarreal', 2405),
+    ('Liverpool', 'Lyon', 1285),
+    ('Lyon', 'Bordeaux', 554),
+    ('Lyon', 'Lisbon', 1700),
+    ('Zilina', 'Moscow', 1745),
+    ('Saint Petersburg', 'Porto', 4388),
+    ('Moscow', 'Lille', 2640),
+    ('Farum', 'London', 1263),
+    ('Basel', 'Gelsenkirchen', 560),
+    ('Nicosia', 'Amsterdam', 3700),
+    ('Wolfsburg', 'Madrid', 2125)
+]
+
+for city1, city2, dist in new_distances:
+    mask = (distance_df['City1'] == city1) & (distance_df['City2'] == city2)
+    if mask.any():
+        distance_df.loc[mask, 'Distance'] = dist
+
+distance_df['Distance'] = distance_df['Distance'].round(0).astype(int)
+missing_distances = distance_df['Distance'].isna().sum()
+
+if missing_distances == 0:
+    print(f"Number of empty values now in 'Distance': {missing_distances}. Good Job")
+else:
+    print(f"Number of empty values now in 'Distance': {missing_distances}. There are still missing values.")
+
+Teams_nd_Stadiums_df.rename(columns={'City': 'City1', 'City 2': 'City2'}, inplace=True)
+Teams_nd_Stadiums_df = Teams_nd_Stadiums_df.merge(distance_df[['City1', 'City2', 'Distance']], on=['City1', 'City2'], how='left')
+
+print(Teams_nd_Stadiums_df.columns)
+new_order = ['Date', 'Team 1', 'Team 2','FT', 'HT', 'Stadium', 'Capacity','City1', 'City2', 'Distance', 'Ranking Team 1', 'Ranking Team 2','Cleaned Date', 'Previous Season']
+Teams_nd_Stadiums_df = Teams_nd_Stadiums_df[new_order]
+Teams_nd_Stadiums_df.to_excel(r'C:\Users\99gio\OneDrive\Desktop\prove python\final_df_maybe.xlsx', index=False)
+
+Final_df = Teams_nd_Stadiums_df
+#finally i have adjusted the whole dataframe
+print(Final_df.head())
